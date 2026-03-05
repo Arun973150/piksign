@@ -48,14 +48,29 @@ class PikSignShield:
     - Perceptual hash fingerprinting
     """
     
-    def __init__(self, config: Config = None):
+    def __init__(self, config: Config = None, gpu_client=None):
         self.config = config or Config()
-        self.device = self.config.DEVICE
-        
+        self.gpu_client = gpu_client
+
+        # When gpu_client is provided, skip loading GPU-heavy models locally
+        use_remote_gpu = gpu_client is not None
+
+        if use_remote_gpu:
+            self.device = torch.device("cpu")
+        else:
+            self.device = self.config.DEVICE
+
         print_banner("INITIALIZING PIKSIGN SHIELD")
-        
+
+        if use_remote_gpu:
+            print("\n[*] GPU operations will be delegated to remote Colab server")
+
         print("\n[1/9] Content analyzer...")
-        self.content_analyzer = ContentAnalyzer(self.device)
+        if use_remote_gpu:
+            self.content_analyzer = None
+            print("      [OK] Using remote GPU")
+        else:
+            self.content_analyzer = ContentAnalyzer(self.device)
 
         print("[2/9] Adaptive engine...")
         self.adaptive_engine = AdaptiveTransformEngine(self.config)
@@ -70,14 +85,18 @@ class PikSignShield:
         )
 
         print("[5/9] Drift controller...")
-        self.drift_controller = SemanticDriftController(
-            self.device,
-            self.config.SEMANTIC_DRIFT_TARGET
-        )
+        if use_remote_gpu:
+            self.drift_controller = None
+            print("      [OK] Using remote GPU")
+        else:
+            self.drift_controller = SemanticDriftController(
+                self.device,
+                self.config.SEMANTIC_DRIFT_TARGET
+            )
 
         print("[6/9] Perceptual Hash System...")
         self.phash_system = PerceptualHashSystem(self.config.PHASH_SIZE)
-        
+
         print("[7/9] Multi-Band Frequency Watermark...")
         self.multiband_watermark = MultiBandFrequencyWatermark(
             self.config.MULTIBAND_STRENGTH,
@@ -86,7 +105,9 @@ class PikSignShield:
 
         print("[8/9] LEAT Deepfake Disruption...")
         self.leat = None
-        if self.config.LEAT_ENABLED and HAS_LEAT:
+        if use_remote_gpu:
+            print("      [OK] Using remote GPU")
+        elif self.config.LEAT_ENABLED and HAS_LEAT:
             try:
                 self.leat = LEATAttack(
                     device=self.device,
@@ -116,7 +137,7 @@ class PikSignShield:
         else:
             self.c2pa = None
             print("      [!] C2PA not available")
-        
+
         print("\n[OK] All systems ready!")
         print("=" * 80)
     
@@ -220,7 +241,29 @@ class PikSignShield:
         
         # Step 3: Analyze content
         print("\n[3/9] Analyzing content...")
-        content_analysis = self.content_analyzer.analyze(img_tensor, img_array)
+        content_analysis = None
+        if self.gpu_client:
+            content_analysis = self.gpu_client.analyze_content(img_pil)
+            if content_analysis:
+                print("      [OK] (remote GPU)")
+        if content_analysis is None and self.content_analyzer is not None:
+            content_analysis = self.content_analyzer.analyze(img_tensor, img_array)
+        if content_analysis is None:
+            # Lightweight CPU fallback: face detection + defaults
+            import cv2
+            gray = cv2.cvtColor((img_array * 255).astype(np.uint8), cv2.COLOR_RGB2GRAY)
+            try:
+                fc = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+                faces = fc.detectMultiScale(gray, 1.1, 4)
+                face_count = len(faces)
+            except Exception:
+                face_count = 0
+            content_analysis = {
+                'has_faces': face_count > 0, 'face_count': face_count,
+                'clip_vulnerability': 0.5, 'texture_complexity': 0.5,
+                'risk_level': 'HIGH' if face_count > 0 else 'MEDIUM',
+            }
+            print("      [OK] (CPU fallback)")
         print(f"      [OK] Risk: {content_analysis['risk_level']}")
         print(f"      [OK] Faces: {content_analysis['face_count']}")
         print(f"      [OK] Vulnerability: {content_analysis['clip_vulnerability']:.3f}")
@@ -234,15 +277,35 @@ class PikSignShield:
         # Step 5: Apply LEAT adversarial perturbation + confusion transforms
         print("\n[5/9] Applying deepfake disruption...")
         leat_metrics = None
-        if self.leat is not None:
-            print("      Generating LEAT adversarial perturbation...")
+        leat_perturbation = None
+
+        # Try remote GPU first
+        if self.gpu_client and self.gpu_client.is_available():
+            print("      Requesting LEAT from remote GPU server...")
+            leat_result = self.gpu_client.generate_leat(
+                img_pil,
+                iterations=self.config.LEAT_ITERATIONS,
+                epsilon=self.config.LEAT_EPSILON,
+                step_size=self.config.LEAT_STEP_SIZE,
+            )
+            if leat_result is not None:
+                leat_perturbation = torch.from_numpy(
+                    leat_result["perturbation"]
+                ).to(self.device)
+                leat_metrics = leat_result["leat_metrics"]
+                avg_latent_dist = np.mean([
+                    m.get('latent_cosine_distance', 0.0)
+                    for m in leat_metrics.values()
+                    if isinstance(m, dict)
+                ])
+                print(f"      [OK] Remote LEAT done (avg disruption: {avg_latent_dist:.4f})")
+            else:
+                print("      [!] Remote LEAT failed, falling back...")
+
+        # Try local LEAT if remote didn't work
+        if leat_perturbation is None and self.leat is not None:
+            print("      Generating LEAT adversarial perturbation locally...")
             leat_perturbation = self.leat.generate_perturbation(img_tensor)
-
-            # Scale LEAT perturbation to respect adaptive epsilon
-            leat_scale = min(epsilon / self.config.LEAT_EPSILON, 1.0)
-            leat_perturbation = leat_perturbation * leat_scale
-
-            # Measure latent disruption
             leat_metrics = self.leat.compute_latent_disruption(
                 img_tensor, leat_perturbation
             )
@@ -250,6 +313,11 @@ class PikSignShield:
                 m['latent_cosine_distance'] for m in leat_metrics.values()
             ])
             print(f"      [OK] LEAT perturbation generated (avg latent disruption: {avg_latent_dist:.4f})")
+
+        if leat_perturbation is not None:
+            # Scale LEAT perturbation to respect adaptive epsilon
+            leat_scale = min(epsilon / self.config.LEAT_EPSILON, 1.0)
+            leat_perturbation = leat_perturbation * leat_scale
 
             # Also compute confusion transforms for supplementary protection
             confusion = ConfusionTransform(epsilon, freq_weights)
@@ -310,10 +378,21 @@ class PikSignShield:
         
         psnr_value = compute_psnr(img_array, protected_array)
         ssim_value = compute_ssim(img_array, protected_array)
-        embedding_drift = self.drift_controller.compute_embedding_drift(
-            img_tensor, 
-            protected_tensor.detach()
-        )
+
+        # Compute embedding drift (remote GPU or local)
+        embedding_drift = 0.0
+        if self.gpu_client and self.gpu_client.is_available():
+            from PIL import Image as _PILImage
+            prot_pil = _PILImage.fromarray((protected_array * 255).clip(0, 255).astype(np.uint8))
+            drift_val = self.gpu_client.compute_drift(img_pil, prot_pil)
+            if drift_val is not None:
+                embedding_drift = drift_val
+                print("      [OK] Drift computed (remote GPU)")
+        elif self.drift_controller is not None:
+            embedding_drift = self.drift_controller.compute_embedding_drift(
+                img_tensor,
+                protected_tensor.detach()
+            )
         
         psnr_ok = psnr_value >= self.config.TARGET_PSNR
         ssim_ok = ssim_value >= self.config.TARGET_SSIM

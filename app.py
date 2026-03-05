@@ -98,6 +98,35 @@ with st.sidebar:
     leat_epsilon = st.slider("LEAT Epsilon (x255)", 1.0, 16.0, 12.75, 0.25, help="Max perturbation magnitude (in /255 units)")
 
     st.divider()
+    st.markdown("### GPU Server (Colab)")
+    colab_url = st.text_input(
+        "Colab Server URL",
+        value=st.session_state.get("colab_url", ""),
+        placeholder="https://xxxx.ngrok-free.app",
+        help="Paste the ngrok URL from your Colab notebook"
+    )
+    if colab_url:
+        st.session_state["colab_url"] = colab_url
+
+    gpu_client = None
+    if colab_url:
+        try:
+            from piksign.gpu_client import ColabGPUClient
+            gpu_client = ColabGPUClient(colab_url)
+            if gpu_client.is_available():
+                health = gpu_client.get_health()
+                gpu_name = health.get("gpu", "GPU") if health else "GPU"
+                st.success(f"GPU: CONNECTED ({gpu_name})")
+            else:
+                st.warning("GPU: UNREACHABLE")
+                gpu_client = None
+        except Exception as e:
+            st.warning(f"GPU client error: {e}")
+            gpu_client = None
+    else:
+        st.info("GPU: Not configured (LEAT via Colab disabled)")
+
+    st.divider()
     st.caption("AI detection: ELA, PRNU, Geometric, DIRE (optional), Reality Defender, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
 
 
@@ -326,6 +355,9 @@ with tab2:
 
     prot_file = st.file_uploader("Upload image to protect", type=['png', 'jpg', 'jpeg'], key="prot_upload")
 
+    if gpu_client is None:
+        st.warning("GPU Server not connected. LEAT protection disabled -- only CPU-based confusion transforms will be applied. Connect a Colab GPU server in the sidebar for full protection.")
+
     if prot_file and BACKEND_READY:
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(prot_file.name)[1]) as tmp:
             tmp.write(prot_file.getvalue())
@@ -341,7 +373,7 @@ with tab2:
                 with st.spinner("Running 9-step protection pipeline..."):
                     out_path = tempfile.mktemp(suffix=".png")
 
-                    shield = PikSignShield()
+                    shield = PikSignShield(gpu_client=gpu_client)
                     out_path_result, metrics = shield.protect_image(in_path, out_path)
 
                     status = metrics.get('status', '')
