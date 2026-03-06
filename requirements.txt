@@ -9,3 +9,4 @@ PyWavelets>=1.4
 scikit-image>=0.20
 torch
 torchvision
+python-dotenv

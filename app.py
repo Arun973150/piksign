@@ -8,6 +8,14 @@ import numpy as np
 from PIL import Image
 from typing import Dict, Any
 
+# Bridge Streamlit secrets to os.environ for backend modules
+try:
+    for key, val in st.secrets.items():
+        if isinstance(val, str):
+            os.environ[key] = val
+except Exception:
+    pass
+
 
 try:
     from piksign.detection import PikSignDetector
