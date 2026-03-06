@@ -18,8 +18,6 @@ except Exception:
 
 
 try:
-    from piksign.detection import PikSignDetector
-    from piksign.protection.shield import PikSignShield
     from piksign.protection.c2pa import C2PAMetadataBinding
     BACKEND_READY = True
 except ImportError as e:
@@ -138,6 +136,17 @@ with st.sidebar:
     st.caption("AI detection: ELA, PRNU, Geometric, DIRE (optional), Reality Defender, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
 
 
+@st.cache_resource
+def get_detector():
+    from piksign.detection import PikSignDetector
+    return PikSignDetector()
+
+@st.cache_resource
+def get_shield(_gpu_client):
+    from piksign.protection.shield import PikSignShield
+    return PikSignShield(gpu_client=_gpu_client)
+
+
 def patch_dire_off(detector):
     """Monkey-patch the AI manipulation track to skip DIRE."""
     def _run_ai_no_dire(image_path):
@@ -217,7 +226,7 @@ with tab1:
                 tmp_path = tmp.name
 
             with st.spinner("Running Gated v3.0 Detection Flow..."):
-                detector = PikSignDetector()
+                detector = get_detector()
                 detector.AI_THRESHOLD = ai_threshold
 
                 # Patch DIRE off if disabled in sidebar
@@ -381,7 +390,7 @@ with tab2:
                 with st.spinner("Running 9-step protection pipeline..."):
                     out_path = tempfile.mktemp(suffix=".png")
 
-                    shield = PikSignShield(gpu_client=gpu_client)
+                    shield = get_shield(gpu_client)
                     out_path_result, metrics = shield.protect_image(in_path, out_path)
 
                     status = metrics.get('status', '')
