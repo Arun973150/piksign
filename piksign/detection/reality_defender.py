@@ -122,6 +122,8 @@ class RealityDefenderDetector:
             return self._parse_result(raw)
 
         except Exception as e:
+            print(f"   [!] Reality Defender exception: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return {
                 'status': 'error',
                 'probability': 0.0,
