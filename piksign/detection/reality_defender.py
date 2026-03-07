@@ -117,11 +117,11 @@ class RealityDefenderDetector:
             }
 
         try:
-            print("   Uploading to Reality Defender...", end="\r")
+            print("   Uploading to Reality Defender...")
             raw = self._run_async_detection(image_path)
             request_id = raw.get("request_id", "")[:8]
-            print(f"   Uploaded (ID: {request_id}...)           ")
-            print("   Analysis complete                          ")
+            print(f"   Polling for result (ID: {request_id}...)  ")
+            print("   Analysis complete.")
             return self._parse_result(raw)
 
         except Exception as e:
