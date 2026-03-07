@@ -134,25 +134,13 @@ class RealityDefenderDetector:
         """
         Run async Reality Defender detection synchronously.
 
-        Handles the event loop creation/reuse for sync compatibility.
+        Always runs in a dedicated thread with a fresh event loop to avoid
+        "Event loop is closed" errors in Streamlit's threading model.
         """
-        try:
-            # Try to get existing event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an async context, create a new thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    result = pool.submit(
-                        asyncio.run,
-                        self._async_detect(image_path)
-                    ).result(timeout=120)
-                return result
-            else:
-                return loop.run_until_complete(self._async_detect(image_path))
-        except RuntimeError:
-            # No event loop exists, create one
-            return asyncio.run(self._async_detect(image_path))
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, self._async_detect(image_path))
+            return future.result(timeout=120)
 
     async def _async_detect(self, image_path: str) -> Dict[str, Any]:
         """
