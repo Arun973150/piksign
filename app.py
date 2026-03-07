@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 import sys
+import io
+import contextlib
 import tempfile
 import json
 import time
@@ -247,7 +249,10 @@ with tab1:
                 elif hasattr(detector, '_orig_run_ai_manipulation_track'):
                     detector._run_ai_manipulation_track = detector._orig_run_ai_manipulation_track
 
-                results = detector.full_analysis(tmp_path)
+                _log_buf = io.StringIO()
+                with contextlib.redirect_stdout(_log_buf):
+                    results = detector.full_analysis(tmp_path)
+                _detection_logs = _log_buf.getvalue()
 
                 verdict = results['final_verdict']
                 v_text = verdict['final_verdict']
@@ -371,6 +376,10 @@ with tab1:
             else:
                 st.caption("C2PA: Not found / Not verified")
 
+            # --- Detection Logs ---
+            with st.expander("View Detection Logs"):
+                st.code(_detection_logs, language="text")
+
             # --- Full JSON ---
             with st.expander("View Full JSON Report"):
                 st.json(results)
@@ -405,7 +414,10 @@ with tab2:
                     out_path = tempfile.mktemp(suffix=".png")
 
                     shield = get_shield(colab_url or "")
-                    out_path_result, metrics = shield.protect_image(in_path, out_path)
+                    _prot_log_buf = io.StringIO()
+                    with contextlib.redirect_stdout(_prot_log_buf):
+                        out_path_result, metrics = shield.protect_image(in_path, out_path)
+                    _protection_logs = _prot_log_buf.getvalue()
 
                     status = metrics.get('status', '')
 
@@ -464,6 +476,10 @@ with tab2:
                                     lcols[i].metric(enc_name, f"{dist:.4f}")
 
                         st.divider()
+
+                        # Protection logs
+                        with st.expander("View Protection Logs"):
+                            st.code(_protection_logs, language="text")
 
                         # Preview + download
                         actual_out = out_path_result if out_path_result else out_path
