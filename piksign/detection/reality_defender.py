@@ -118,8 +118,8 @@ class RealityDefenderDetector:
 
         try:
             # Run the async upload + polling in a sync context
-            result = self._run_async_detection(image_path)
-            return result
+            raw = self._run_async_detection(image_path)
+            return self._parse_result(raw)
 
         except Exception as e:
             return {
@@ -134,36 +134,39 @@ class RealityDefenderDetector:
         """
         Run async Reality Defender detection synchronously.
 
-        Always runs in a dedicated thread with a fresh event loop to avoid
-        "Event loop is closed" errors in Streamlit's threading model.
+        Creates a fresh RealityDefender instance inside a dedicated thread so
+        the SDK's internal aiohttp session is always bound to a live event loop.
         """
         import concurrent.futures
+        api_key = self.api_key
+
+        def _in_thread():
+            return asyncio.run(self._async_detect_fresh(api_key, image_path))
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, self._async_detect(image_path))
-            return future.result(timeout=120)
+            return pool.submit(_in_thread).result(timeout=120)
 
-    async def _async_detect(self, image_path: str) -> Dict[str, Any]:
+    @staticmethod
+    async def _async_detect_fresh(api_key: str, image_path: str) -> Dict[str, Any]:
         """
-        Async detection using Reality Defender SDK.
+        Async detection with a freshly created RealityDefender instance.
+        Instantiating inside the coroutine ensures the SDK binds to the
+        current (live) event loop, not a stale one from a previous run.
+        """
+        rd = RealityDefender(api_key=api_key)
 
-        Steps:
-        1. Upload image to Reality Defender
-        2. Poll for results (SDK handles retries)
-        3. Parse and return structured result
-        """
         # Step 1: Upload
         print("   Uploading to Reality Defender...", end="\r")
-        response = await self.rd.upload(file_path=image_path)
+        response = await rd.upload(file_path=image_path)
         request_id = response["request_id"]
         print(f"   Uploaded (ID: {request_id[:8]}...)           ")
 
         # Step 2: Poll for results
         print("   Waiting for analysis...", end="\r")
-        result = await self.rd.get_result(request_id)
+        result = await rd.get_result(request_id)
         print("   Analysis complete                          ")
 
-        # Step 3: Parse result
-        return self._parse_result(result)
+        return result
 
     def _parse_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """
