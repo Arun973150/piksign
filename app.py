@@ -117,14 +117,17 @@ with st.sidebar:
     gpu_client = None
     if colab_url:
         try:
-            from piksign.gpu_client import ColabGPUClient
-            gpu_client = ColabGPUClient(colab_url)
-            if gpu_client.is_available():
-                health = gpu_client.get_health()
-                gpu_name = health.get("gpu", "GPU") if health else "GPU"
+            gpu_client = get_gpu_client(colab_url)
+            health = gpu_client.get_health()  # single HTTP call; also warms the is_available cache
+            if health is not None:
+                gpu_name = health.get("gpu", "GPU")
+                gpu_client._healthy = True
+                gpu_client._last_check = time.time()
                 st.success(f"GPU: CONNECTED ({gpu_name})")
             else:
                 st.warning("GPU: UNREACHABLE")
+                gpu_client._healthy = False
+                gpu_client._last_check = time.time()
                 gpu_client = None
         except Exception as e:
             st.warning(f"GPU client error: {e}")
@@ -142,13 +145,22 @@ def get_detector():
     return PikSignDetector()
 
 @st.cache_resource
-def get_shield(_gpu_client):
+def get_gpu_client(url: str):
+    from piksign.gpu_client import ColabGPUClient
+    return ColabGPUClient(url)
+
+@st.cache_resource
+def get_shield(colab_url: str):
     from piksign.protection.shield import PikSignShield
-    return PikSignShield(gpu_client=_gpu_client)
+    client = get_gpu_client(colab_url) if colab_url else None
+    return PikSignShield(gpu_client=client)
 
 
 def patch_dire_off(detector):
-    """Monkey-patch the AI manipulation track to skip DIRE."""
+    """Monkey-patch the AI manipulation track to skip DIRE. Saves original for restoration."""
+    if not hasattr(detector, '_orig_run_ai_manipulation_track'):
+        detector._orig_run_ai_manipulation_track = detector._run_ai_manipulation_track
+
     def _run_ai_no_dire(image_path):
         try:
             from piksign.ai_image_forensics import run_forensics_pipeline
@@ -229,9 +241,11 @@ with tab1:
                 detector = get_detector()
                 detector.AI_THRESHOLD = ai_threshold
 
-                # Patch DIRE off if disabled in sidebar
+                # Apply or restore DIRE patch based on sidebar toggle
                 if not dire_enabled:
                     patch_dire_off(detector)
+                elif hasattr(detector, '_orig_run_ai_manipulation_track'):
+                    detector._run_ai_manipulation_track = detector._orig_run_ai_manipulation_track
 
                 results = detector.full_analysis(tmp_path)
 
@@ -390,7 +404,7 @@ with tab2:
                 with st.spinner("Running 9-step protection pipeline..."):
                     out_path = tempfile.mktemp(suffix=".png")
 
-                    shield = get_shield(gpu_client)
+                    shield = get_shield(colab_url or "")
                     out_path_result, metrics = shield.protect_image(in_path, out_path)
 
                     status = metrics.get('status', '')
