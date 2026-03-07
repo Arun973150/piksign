@@ -271,9 +271,9 @@ class EmbeddingForensics:
                                std=[0.229, 0.224, 0.225])
         ])
     
-    def extract_patch_embeddings(self, image: np.ndarray, 
+    def extract_patch_embeddings(self, image: np.ndarray,
                                   patch_size: int = 64,
-                                  stride: int = 32) -> Tuple[List[np.ndarray], List[Tuple[int, int]]]:
+                                  stride: int = 64) -> Tuple[List[np.ndarray], List[Tuple[int, int]]]:
         """Extract embeddings from image patches."""
         import torch
         
