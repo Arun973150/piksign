@@ -17,9 +17,9 @@ class Config:
     MIN_SIZE = 256
     MAX_SIZE = 2048
     
-    # Epsilon values for perturbation (reduced for quality)
-    EPSILON_BASE = 1.5 / 255
-    EPSILON_MAX = 3.0 / 255
+    # Epsilon values for perturbation
+    EPSILON_BASE = 8.0 / 255
+    EPSILON_MAX = 16.0 / 255
     
     # Quality targets
     TARGET_PSNR = 40.0
@@ -48,7 +48,7 @@ class Config:
 
     # LEAT (Latent Ensemble Attack) settings
     LEAT_ENABLED = True
-    LEAT_ITERATIONS = 50       # PGD iterations (increased for stronger attack)
+    LEAT_ITERATIONS = 100      # PGD iterations
     LEAT_STEP_SIZE = 0.01      # Per-iteration step size (a in Algorithm 1)
     LEAT_EPSILON = 0.08        # Max L-inf perturbation (~20/255, stronger bound)
     LEAT_ENCODERS = ['arcface', 'stylegan', 'diffae', 'icface', 'vgg', 'sdvae', 'sdxl_vae']
