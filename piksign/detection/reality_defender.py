@@ -117,13 +117,16 @@ class RealityDefenderDetector:
             }
 
         try:
-            # Run the async upload + polling in a sync context
+            print("   Uploading to Reality Defender...", end="\r")
             raw = self._run_async_detection(image_path)
+            request_id = raw.get("request_id", "")[:8]
+            print(f"   Uploaded (ID: {request_id}...)           ")
+            print("   Analysis complete                          ")
             return self._parse_result(raw)
 
         except Exception as e:
             tb = traceback.format_exc()
-            print(f"   [!] Reality Defender exception: {type(e).__name__}: {e}")
+            print(f"\n   [!] Reality Defender error: {e}")
             print(tb)
             return {
                 'status': 'error',
@@ -137,34 +140,22 @@ class RealityDefenderDetector:
         """
         Run async Reality Defender detection synchronously.
 
-        Creates a fresh RealityDefender instance inside a dedicated thread so
-        the SDK's internal aiohttp session is always bound to a live event loop.
+        Runs in a dedicated thread with a fresh event loop. No printing is
+        done inside the thread because Streamlit's UI context is not available
+        in background threads (raises NoSessionContext).
+        All status printing happens in the main thread before/after this call.
         """
         import concurrent.futures
         api_key = self.api_key
 
-        # Diagnostics: show loop state before spawning thread
-        try:
-            _loop = asyncio.get_event_loop()
-            print(f"\n   [DBG] Pre-thread loop: running={_loop.is_running()} closed={_loop.is_closed()} id={id(_loop)}")
-        except RuntimeError as _re:
-            print(f"\n   [DBG] Pre-thread loop: no loop ({_re})")
-
         def _in_thread():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                _tloop = asyncio.new_event_loop()
-                asyncio.set_event_loop(_tloop)
-                print(f"   [DBG] Thread loop created: id={id(_tloop)}")
-                try:
-                    return _tloop.run_until_complete(self._async_detect_fresh(api_key, image_path))
-                finally:
-                    _tloop.close()
-                    asyncio.set_event_loop(None)
-            except Exception as _te:
-                tb = traceback.format_exc()
-                print(f"\n   [DBG] Thread exception: {type(_te).__name__}: {_te}")
-                print(tb)
-                raise
+                return loop.run_until_complete(self._async_detect_fresh(api_key, image_path))
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             return pool.submit(_in_thread).result(timeout=120)
@@ -173,22 +164,13 @@ class RealityDefenderDetector:
     async def _async_detect_fresh(api_key: str, image_path: str) -> Dict[str, Any]:
         """
         Async detection with a freshly created RealityDefender instance.
-        Instantiating inside the coroutine ensures the SDK binds to the
-        current (live) event loop, not a stale one from a previous run.
+        No print() calls here — this runs in a background thread which has
+        no Streamlit session context.
         """
         rd = RealityDefender(api_key=api_key)
-
-        # Step 1: Upload
-        print("   Uploading to Reality Defender...", end="\r")
         response = await rd.upload(file_path=image_path)
         request_id = response["request_id"]
-        print(f"   Uploaded (ID: {request_id[:8]}...)           ")
-
-        # Step 2: Poll for results
-        print("   Waiting for analysis...", end="\r")
         result = await rd.get_result(request_id)
-        print("   Analysis complete                          ")
-
         return result
 
     def _parse_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
