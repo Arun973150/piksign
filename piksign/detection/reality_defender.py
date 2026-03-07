@@ -144,7 +144,13 @@ class RealityDefenderDetector:
         api_key = self.api_key
 
         def _in_thread():
-            return asyncio.run(self._async_detect_fresh(api_key, image_path))
+            try:
+                return asyncio.run(self._async_detect_fresh(api_key, image_path))
+            except Exception as _te:
+                tb = traceback.format_exc()
+                print(f"\n   [DBG] Thread exception: {type(_te).__name__}: {_te}")
+                print(tb)
+                raise
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             return pool.submit(_in_thread).result(timeout=120)
