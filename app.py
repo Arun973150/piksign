@@ -10,6 +10,20 @@ import numpy as np
 from PIL import Image
 from typing import Dict, Any
 
+
+class _LiveLogStream:
+    """Redirects stdout to a Streamlit placeholder in real-time."""
+    def __init__(self, placeholder):
+        self._placeholder = placeholder
+        self._buf = ""
+
+    def write(self, text):
+        self._buf += text
+        self._placeholder.code(self._buf, language="text")
+
+    def flush(self):
+        pass
+
 # Bridge Streamlit secrets to os.environ for backend modules
 try:
     for key, val in st.secrets.items():
@@ -239,6 +253,9 @@ with tab1:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
 
+            st.markdown("#### Live Detection Logs")
+            _detect_log_placeholder = st.empty()
+
             with st.spinner("Running Gated v3.0 Detection Flow..."):
                 detector = get_detector()
                 detector.AI_THRESHOLD = ai_threshold
@@ -249,10 +266,12 @@ with tab1:
                 elif hasattr(detector, '_orig_run_ai_manipulation_track'):
                     detector._run_ai_manipulation_track = detector._orig_run_ai_manipulation_track
 
-                _log_buf = io.StringIO()
-                with contextlib.redirect_stdout(_log_buf):
+                _live = _LiveLogStream(_detect_log_placeholder)
+                sys.stdout = _live
+                try:
                     results = detector.full_analysis(tmp_path)
-                _detection_logs = _log_buf.getvalue()
+                finally:
+                    sys.stdout = sys.__stdout__
 
                 verdict = results['final_verdict']
                 v_text = verdict['final_verdict']
@@ -376,10 +395,6 @@ with tab1:
             else:
                 st.caption("C2PA: Not found / Not verified")
 
-            # --- Detection Logs ---
-            with st.expander("View Detection Logs"):
-                st.code(_detection_logs, language="text")
-
             # --- Full JSON ---
             with st.expander("View Full JSON Report"):
                 st.json(results)
@@ -410,14 +425,19 @@ with tab2:
 
         with col2:
             if st.button("Run Protection", type="primary"):
+                st.markdown("#### Live Protection Logs")
+                _prot_log_placeholder = st.empty()
+
                 with st.spinner("Running 9-step protection pipeline..."):
                     out_path = tempfile.mktemp(suffix=".png")
 
                     shield = get_shield(colab_url or "")
-                    _prot_log_buf = io.StringIO()
-                    with contextlib.redirect_stdout(_prot_log_buf):
+                    _live_prot = _LiveLogStream(_prot_log_placeholder)
+                    sys.stdout = _live_prot
+                    try:
                         out_path_result, metrics = shield.protect_image(in_path, out_path)
-                    _protection_logs = _prot_log_buf.getvalue()
+                    finally:
+                        sys.stdout = sys.__stdout__
 
                     status = metrics.get('status', '')
 
@@ -476,10 +496,6 @@ with tab2:
                                     lcols[i].metric(enc_name, f"{dist:.4f}")
 
                         st.divider()
-
-                        # Protection logs
-                        with st.expander("View Protection Logs"):
-                            st.code(_protection_logs, language="text")
 
                         # Preview + download
                         actual_out = out_path_result if out_path_result else out_path
