@@ -28,17 +28,16 @@ class AdaptiveTransformEngine:
         
         vulnerability = content_analysis['clip_vulnerability']
         
-        # Conservative epsilon scaling for quality
         if vulnerability > 0.7:
-            epsilon = max_epsilon * 0.6
+            epsilon = max_epsilon
         elif vulnerability > 0.5:
-            epsilon = base_epsilon + (max_epsilon - base_epsilon) * 0.3
+            epsilon = base_epsilon + (max_epsilon - base_epsilon) * 0.6
         else:
             epsilon = base_epsilon
-        
-        # Slight increase for faces (quality preservation important)
+
+        # Faces are the primary deepfake target — use more budget, not less
         if content_analysis['has_faces']:
-            epsilon = min(epsilon * 1.05, max_epsilon * 0.7)
+            epsilon = min(epsilon * 1.2, max_epsilon)
         
         return epsilon
     
