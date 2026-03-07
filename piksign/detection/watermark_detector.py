@@ -217,9 +217,11 @@ class WatermarkDetector:
             h, w = dct_coef.shape
             mid_band = dct_coef[h//8:h//2, w//8:w//2]
             
-            # Compute autocorrelation to find periodic patterns
-            autocorr = np.correlate(mid_band.flatten(), mid_band.flatten(), mode='full')
-            autocorr = autocorr[len(autocorr)//2:]  # Keep positive lags
+            # Compute autocorrelation via FFT (O(n log n) vs O(n²) for np.correlate)
+            flat = mid_band.flatten()
+            n = len(flat)
+            fft_flat = np.fft.rfft(flat, n=2 * n)
+            autocorr = np.fft.irfft(fft_flat * np.conj(fft_flat))[:n].real
             autocorr = autocorr / (autocorr[0] + 1e-10)  # Normalize
             
             # Look for periodic peaks (watermark signature)

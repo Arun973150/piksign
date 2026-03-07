@@ -412,17 +412,32 @@ class PikSignDetector:
         print(f"   Manip combined:       {manip_combined*100:5.1f}%  {_bar(manip_combined)}")
 
         # Optional extras: EXIF + watermark
+        print("\n[Step 4] EXIF & Watermark Check...")
         if self.exif_validator:
             exif_val = self.exif_validator.validate(image_path)
             results['exif'] = exif_val
+            ai_sig = exif_val.get('ai_signature_found', False)
+            print(f"   EXIF AI signature:    {'FOUND' if ai_sig else 'not found'}")
+        else:
+            print("   EXIF validator:       not available")
         if self.watermark_detector:
+            print("   Watermark detection:  running...")
             wm = self.watermark_detector.detect(image_path)
             results['watermark'] = wm
+            wm_det = wm.get('watermark_detected', False)
+            wm_type = wm.get('watermark_type', 'none')
+            wm_conf = wm.get('watermark_confidence', 0.0)
+            print(f"   Watermark detected:   {'YES (' + wm_type + ')' if wm_det else 'no'}  {wm_conf*100:.1f}%  {_bar(wm_conf)}")
+        else:
+            print("   Watermark detector:   not available")
 
         # C2PA (purely informational at this stage since Step 0 already checked)
+        print("\n[Step 5] C2PA Provenance...")
         results['c2pa_verification'] = self.verify_c2pa(image_path)
+        c2pa_ok = results['c2pa_verification'].get('verified', False)
+        print(f"   C2PA:                 {'VERIFIED AUTHENTIC' if c2pa_ok else 'not found / not verified'}")
 
-        # -- Step 4: Final Verdict --------------------------------------------
+        # -- Step 6: Final Verdict --------------------------------------------
         verdict = self._compute_verdict(
             manip_ai_prob=manip_ai_prob,
             rd_prob=rd_prob,
