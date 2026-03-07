@@ -143,9 +143,23 @@ class RealityDefenderDetector:
         import concurrent.futures
         api_key = self.api_key
 
+        # Diagnostics: show loop state before spawning thread
+        try:
+            _loop = asyncio.get_event_loop()
+            print(f"\n   [DBG] Pre-thread loop: running={_loop.is_running()} closed={_loop.is_closed()} id={id(_loop)}")
+        except RuntimeError as _re:
+            print(f"\n   [DBG] Pre-thread loop: no loop ({_re})")
+
         def _in_thread():
             try:
-                return asyncio.run(self._async_detect_fresh(api_key, image_path))
+                _tloop = asyncio.new_event_loop()
+                asyncio.set_event_loop(_tloop)
+                print(f"   [DBG] Thread loop created: id={id(_tloop)}")
+                try:
+                    return _tloop.run_until_complete(self._async_detect_fresh(api_key, image_path))
+                finally:
+                    _tloop.close()
+                    asyncio.set_event_loop(None)
             except Exception as _te:
                 tb = traceback.format_exc()
                 print(f"\n   [DBG] Thread exception: {type(_te).__name__}: {_te}")
