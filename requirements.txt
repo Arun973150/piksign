@@ -10,3 +10,4 @@ scikit-image>=0.20
 torch
 torchvision
 python-dotenv
+realitydefender
