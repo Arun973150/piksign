@@ -149,6 +149,12 @@ class RealityDefenderDetector:
         api_key = self.api_key
 
         def _in_thread():
+            # Restore real stdout so any prints from the RD SDK or asyncio
+            # cleanup don't go through Streamlit's _LiveLogStream, which raises
+            # NoSessionContext in background threads.
+            # Safe: the main Streamlit thread is blocked on .result() below.
+            import sys
+            sys.stdout = sys.__stdout__
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:

@@ -1,10 +1,7 @@
 import streamlit as st
 import os
 import sys
-import io
-import contextlib
 import tempfile
-import json
 import time
 import numpy as np
 from PIL import Image
@@ -12,17 +9,20 @@ from typing import Dict, Any
 
 
 class _LiveLogStream:
-    """Redirects stdout to a Streamlit placeholder in real-time."""
+    """Redirects stdout to a Streamlit placeholder, flushing on newlines."""
     def __init__(self, placeholder):
         self._placeholder = placeholder
         self._buf = ""
 
     def write(self, text):
         self._buf += text
-        self._placeholder.code(self._buf, language="text")
+        if "\n" in text:  # only update UI on newlines to avoid per-character rerenders
+            self._placeholder.code(self._buf, language="text")
 
     def flush(self):
-        pass
+        # Final flush — ensure any remaining partial line is shown
+        if self._buf:
+            self._placeholder.code(self._buf, language="text")
 
 # Bridge Streamlit secrets to os.environ for backend modules
 try:
