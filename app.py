@@ -83,6 +83,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+@st.cache_resource
+def get_detector():
+    from piksign.detection import PikSignDetector
+    return PikSignDetector()
+
+@st.cache_resource
+def get_gpu_client(url: str):
+    from piksign.gpu_client import ColabGPUClient
+    return ColabGPUClient(url)
+
+@st.cache_resource
+def get_shield(colab_url: str):
+    from piksign.protection.shield import PikSignShield
+    client = get_gpu_client(colab_url) if colab_url else None
+    return PikSignShield(gpu_client=client)
+
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### PikSign v3.0")
@@ -137,23 +154,6 @@ with st.sidebar:
 
     st.divider()
     st.caption("AI detection: ELA, PRNU, Geometric, DIRE (optional), Reality Defender, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
-
-
-@st.cache_resource
-def get_detector():
-    from piksign.detection import PikSignDetector
-    return PikSignDetector()
-
-@st.cache_resource
-def get_gpu_client(url: str):
-    from piksign.gpu_client import ColabGPUClient
-    return ColabGPUClient(url)
-
-@st.cache_resource
-def get_shield(colab_url: str):
-    from piksign.protection.shield import PikSignShield
-    client = get_gpu_client(colab_url) if colab_url else None
-    return PikSignShield(gpu_client=client)
 
 
 def patch_dire_off(detector):
