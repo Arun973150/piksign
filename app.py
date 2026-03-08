@@ -383,7 +383,13 @@ with tab2:
                             for i, (enc_name, enc_met) in enumerate(leat_data.items()):
                                 if i < len(lcols):
                                     dist = enc_met.get('latent_cosine_distance', 0.0) if isinstance(enc_met, dict) else 0.0
-                                    lcols[i].metric(enc_name, f"{dist:.4f}")
+                                    mse = enc_met.get('latent_mse', 0.0) if isinstance(enc_met, dict) else 0.0
+                                    lcols[i].metric(
+                                        enc_name,
+                                        f"{dist:.4f}",
+                                        delta=f"MSE {mse:.4f}",
+                                        delta_color="off"
+                                    )
 
                         st.divider()
 
