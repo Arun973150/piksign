@@ -1,27 +1,10 @@
 import streamlit as st
 import os
-import sys
 import tempfile
 import time
 from PIL import Image
 from typing import Dict, Any
 
-
-class _LiveLogStream:
-    """Redirects stdout to a Streamlit placeholder, flushing on newlines."""
-    def __init__(self, placeholder):
-        self._placeholder = placeholder
-        self._buf = ""
-
-    def write(self, text):
-        self._buf += text
-        if "\n" in text:  # only update UI on newlines to avoid per-character rerenders
-            self._placeholder.code(self._buf, language="text")
-
-    def flush(self):
-        # Final flush — ensure any remaining partial line is shown
-        if self._buf:
-            self._placeholder.code(self._buf, language="text")
 
 # Bridge Streamlit secrets to os.environ for backend modules
 try:
@@ -189,18 +172,9 @@ with tab1:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
 
-            st.markdown("#### Live Detection Logs")
-            _detect_log_placeholder = st.empty()
-
             with st.spinner("Running Gated v3.0 Detection Flow..."):
                 detector = get_detector()
-
-                _live = _LiveLogStream(_detect_log_placeholder)
-                sys.stdout = _live
-                try:
-                    results = detector.full_analysis(tmp_path)
-                finally:
-                    sys.stdout = sys.__stdout__
+                results = detector.full_analysis(tmp_path)
 
                 verdict = results['final_verdict']
                 v_text = verdict['final_verdict']
@@ -350,19 +324,10 @@ with tab2:
 
         with col2:
             if st.button("Run Protection", type="primary"):
-                st.markdown("#### Live Protection Logs")
-                _prot_log_placeholder = st.empty()
-
                 with st.spinner("Running 9-step protection pipeline..."):
                     out_path = tempfile.mktemp(suffix=".png")
-
                     shield = get_shield(colab_url or "")
-                    _live_prot = _LiveLogStream(_prot_log_placeholder)
-                    sys.stdout = _live_prot
-                    try:
-                        out_path_result, metrics = shield.protect_image(in_path, out_path)
-                    finally:
-                        sys.stdout = sys.__stdout__
+                    out_path_result, metrics = shield.protect_image(in_path, out_path)
 
                     status = metrics.get('status', '')
 
