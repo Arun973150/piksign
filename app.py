@@ -139,7 +139,7 @@ with st.sidebar:
         st.info("GPU: Not configured (LEAT via Colab disabled)")
 
     st.divider()
-    st.caption("AI detection: ELA, PRNU, Geometric, Reality Defender, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
+    st.caption("AI detection: ELA, PRNU, Geometric, AI Content Detector, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
 
 
 def render_score_bar(label, value, color="#A855F7"):
@@ -226,13 +226,13 @@ with tab1:
             st.divider()
 
             # --- Step 2: Deepfake Track ---
-            st.markdown("### Step 2: Deepfake (Reality Defender)")
+            st.markdown("### Step 2: Deepfake (AI Content Detector)")
             deepfake = results.get('deepfake_detection', {})
             rd_prob = deepfake.get('deepfake_probability', 0.0)
             rd_status = deepfake.get('rd_status', 'N/A')
             rd_models = deepfake.get('rd_models', [])
 
-            st.write(f"**Reality Defender:** {rd_prob*100:.1f}% ({rd_status})")
+            st.write(f"**AI Content Detector:** {rd_prob*100:.1f}% ({rd_status})")
             st.progress(min(rd_prob, 1.0))
 
             if rd_models:
