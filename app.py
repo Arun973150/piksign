@@ -378,18 +378,13 @@ with tab2:
 
                         # LEAT per-encoder metrics
                         if leat_data:
-                            st.markdown("#### LEAT Encoder Disruption")
-                            lcols = st.columns(min(len(leat_data), 7))
-                            for i, (enc_name, enc_met) in enumerate(leat_data.items()):
-                                if i < len(lcols):
-                                    dist = enc_met.get('latent_cosine_distance', 0.0) if isinstance(enc_met, dict) else 0.0
-                                    mse = enc_met.get('latent_mse', 0.0) if isinstance(enc_met, dict) else 0.0
-                                    lcols[i].metric(
-                                        enc_name,
-                                        f"{dist:.4f}",
-                                        delta=f"MSE {mse:.4f}",
-                                        delta_color="off"
-                                    )
+                            dists = [
+                                v.get('latent_cosine_distance', 0.0)
+                                for v in leat_data.values() if isinstance(v, dict)
+                            ]
+                            avg_dist = sum(dists) / len(dists) if dists else 0.0
+                            st.metric("LEAT Avg. Disruption", f"{avg_dist:.4f}",
+                                      help="Mean latent cosine distance across all encoders")
 
                         st.divider()
 
