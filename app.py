@@ -227,7 +227,7 @@ with tab1:
                 ai_p = verdict.get('P_ai', 0.0)
                 st.write("**AI Score (blended)**")
                 st.progress(min(ai_p, 1.0))
-                st.caption(f"{ai_p*100:.1f}%  |  Threshold: {ai_threshold*100:.1f}%")
+                st.caption(f"{ai_p*100:.1f}%")
             with c2:
                 mn_p = verdict.get('P_manipulated', 0.0)
                 st.write("**Manipulation Score**")
