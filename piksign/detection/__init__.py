@@ -294,13 +294,19 @@ class PikSignDetector:
             3. Forensics                 (supplementary, always runs)
             4. Final verdict
         """
+        import time
+
         def _bar(p):
             b = int(float(p) * 10)
             return "#" * b + "." * (10 - b)
 
+        def _t(label, start):
+            print(f"   ⏱  {label}: {time.time() - start:.2f}s\n")
+
         print("\n" + "=" * 60)
         print("FULL ANALYSIS  (PikSign v3.0)")
         print("=" * 60)
+        _total_start = time.time()
 
         results = {
             'image_path': image_path,
@@ -316,8 +322,10 @@ class PikSignDetector:
 
         # -- Step 0: PikSign protection check ---------------------------------
         print("\n[Step 0] PikSign Protection Check...")
+        _t0 = time.time()
         prot = self._check_piksign_protection(image_path)
         results['piksign_check'] = prot
+        _t("Step 0 done", _t0)
 
         if prot['is_protected']:
             method = prot.get('method', 'unknown')
@@ -331,30 +339,32 @@ class PikSignDetector:
                 'note': f'Protection confirmed via {method}.'
             }
             self._print_verdict(results['final_verdict'], _bar)
+            print(f"   ⏱  TOTAL: {time.time() - _total_start:.2f}s\n")
             return results
 
         print("   [FAIL] No PikSign protection found. Running full analysis...")
 
         # -- Step 1: AI Manipulation Track ------------------------------------
-        print("\n[Step 1] AI Manipulation Analysis (ELA / PRNU / Geometric / DIRE)...")
+        print("\n[Step 1] AI Manipulation Analysis (ELA / PRNU / Geometric)...")
+        _t1 = time.time()
         ai_manip = self._run_ai_manipulation_track(image_path)
         results['ai_manipulation'] = ai_manip
 
         ela = ai_manip.get('scores', {}).get('ela', 0.0)
         prnu = ai_manip.get('scores', {}).get('prnu', 0.0)
         geo = ai_manip.get('scores', {}).get('geometric', 0.0)
-        dire = ai_manip.get('scores', {}).get('dire', 0.0)
         manip_ai_prob = ai_manip.get('ai_probability', 0.0)
 
         print(f"   ELA  (error level):   {ela*100:5.1f}%  {_bar(ela)}")
         print(f"   PRNU (sensor noise):  {prnu*100:5.1f}%  {_bar(prnu)}")
         print(f"   Geo  (geometry):      {geo*100:5.1f}%  {_bar(geo)}")
-        print(f"   DIRE (diffusion err): {dire*100:5.1f}%  {_bar(dire)}")
         print(f"   Combined AI prob:     {manip_ai_prob*100:5.1f}%  {_bar(manip_ai_prob)}")
         print(f"   Verdict:              {ai_manip.get('verdict', 'unknown')}")
+        _t("Step 1 done", _t1)
 
         # -- Step 2: Deepfake Track --------------------------------------------
         print("\n[Step 2] Deepfake Detection (Reality Defender + local)...")
+        _t2 = time.time()
         if include_deepfake:
             deepfake = self._run_deepfake_track(image_path)
         else:
@@ -375,9 +385,11 @@ class PikSignDetector:
             print(f"     |- {m['name']:20s} {ms*100:5.1f}%  {_bar(ms)}")
         if faces > 0:
             print(f"   Face analysis ({faces} face{'s' if faces > 1 else ''}): {face_score*100:5.1f}%  {_bar(face_score)}")
+        _t("Step 2 done", _t2)
 
         # -- Step 3: Forensics ------------------------------------------------
         print("\n[Step 3] Supplementary Forensics (frequency / embedding / color / manipulation)...")
+        _t3 = time.time()
         if include_forensics:
             forensics_res = self.forensics.analyze(image_path, ai_confidence=rd_prob)
         else:
@@ -410,9 +422,11 @@ class PikSignDetector:
         print(f"   Edge density:         {manip_indiv.get('edge_density', 0.0)*100:5.1f}%  {_bar(manip_indiv.get('edge_density', 0.0))}")
         print(f"   Benford (DCT):        {manip_indiv.get('benford', 0.0)*100:5.1f}%  {_bar(manip_indiv.get('benford', 0.0))}")
         print(f"   Manip combined:       {manip_combined*100:5.1f}%  {_bar(manip_combined)}")
+        _t("Step 3 done", _t3)
 
         # Optional extras: EXIF + watermark
         print("\n[Step 4] EXIF & Watermark Check...")
+        _t4 = time.time()
         if self.exif_validator:
             exif_val = self.exif_validator.validate(image_path)
             results['exif'] = exif_val
@@ -430,12 +444,15 @@ class PikSignDetector:
             print(f"   Watermark detected:   {'YES (' + wm_type + ')' if wm_det else 'no'}  {wm_conf*100:.1f}%  {_bar(wm_conf)}")
         else:
             print("   Watermark detector:   not available")
+        _t("Step 4 done", _t4)
 
         # C2PA (purely informational at this stage since Step 0 already checked)
         print("\n[Step 5] C2PA Provenance...")
+        _t5 = time.time()
         results['c2pa_verification'] = self.verify_c2pa(image_path)
         c2pa_ok = results['c2pa_verification'].get('verified', False)
         print(f"   C2PA:                 {'VERIFIED AUTHENTIC' if c2pa_ok else 'not found / not verified'}")
+        _t("Step 5 done", _t5)
 
         # -- Step 6: Final Verdict --------------------------------------------
         verdict = self._compute_verdict(
@@ -450,6 +467,7 @@ class PikSignDetector:
         )
         results['final_verdict'] = verdict
         self._print_verdict(verdict, _bar)
+        print(f"   ⏱  TOTAL: {time.time() - _total_start:.2f}s\n")
 
         return results
 
