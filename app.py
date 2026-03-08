@@ -3,7 +3,6 @@ import os
 import sys
 import tempfile
 import time
-import numpy as np
 from PIL import Image
 from typing import Dict, Any
 
@@ -125,18 +124,6 @@ with st.sidebar:
         st.error("Core Engine: OFFLINE")
 
     st.divider()
-    st.markdown("### Detection Config")
-    ai_threshold = st.slider("AI Sensitivity Threshold", 0.0, 1.0, 0.55, 0.05)
-    st.info(f"Recommended: 0.55 (optimized for TPR/FPR)")
-    dire_enabled = st.toggle("Enable DIRE", value=False, help="Diffusion Reconstruction Error analysis. Slow but catches diffusion model outputs.")
-
-    st.divider()
-    st.markdown("### Protection Config")
-    leat_enabled = st.toggle("Enable LEAT", value=True, help="Latent Ensemble Attack: adversarial perturbations that disrupt deepfake encoder latent spaces")
-    leat_iterations = st.slider("LEAT PGD Iterations", 5, 50, 20, 5, help="More iterations = stronger disruption but slower")
-    leat_epsilon = st.slider("LEAT Epsilon (x255)", 1.0, 16.0, 12.75, 0.25, help="Max perturbation magnitude (in /255 units)")
-
-    st.divider()
     st.markdown("### GPU Server (Colab)")
     colab_url = st.text_input(
         "Colab Server URL",
@@ -169,58 +156,7 @@ with st.sidebar:
         st.info("GPU: Not configured (LEAT via Colab disabled)")
 
     st.divider()
-    st.caption("AI detection: ELA, PRNU, Geometric, DIRE (optional), Reality Defender, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
-
-
-def patch_dire_off(detector):
-    """Monkey-patch the AI manipulation track to skip DIRE. Saves original for restoration."""
-    if not hasattr(detector, '_orig_run_ai_manipulation_track'):
-        detector._orig_run_ai_manipulation_track = detector._run_ai_manipulation_track
-
-    def _run_ai_no_dire(image_path):
-        try:
-            from piksign.ai_image_forensics import run_forensics_pipeline
-            from piksign.ai_image_forensics import VERDICT_AI_GENERATED, VERDICT_AI_MANIPULATED
-
-            r = run_forensics_pipeline(
-                image_path,
-                run_ela=True,
-                run_prnu=True,
-                run_geometric=True,
-                run_dire=False,
-                save_artifacts=False,
-            )
-            ela_score = r.ela.get('anomaly_score', 0.0) if r.ela else 0.0
-            prnu_score = r.prnu.get('anomaly_score', 0.0) if r.prnu else 0.0
-            geo_score = r.geometric.get('geometric_anomaly_score', 0.0) if r.geometric else 0.0
-            combined = r.combined_anomaly_score or max(ela_score, prnu_score, geo_score)
-            verdict = r.verdict
-
-            if verdict in (VERDICT_AI_GENERATED, VERDICT_AI_MANIPULATED):
-                ai_prob = combined
-            else:
-                ai_prob = combined * (1.0 - r.verdict_confidence)
-
-            ai_prob = float(np.clip(ai_prob, 0.0, 1.0))
-            return {
-                'status': 'success',
-                'ai_probability': ai_prob,
-                'verdict': verdict,
-                'verdict_confidence': float(r.verdict_confidence),
-                'scores': {
-                    'ela': ela_score,
-                    'prnu': prnu_score,
-                    'geometric': geo_score,
-                    'dire': 0.0,
-                    'combined': combined,
-                }
-            }
-        except ImportError:
-            return {'status': 'unavailable', 'ai_probability': 0.0, 'verdict': 'unknown', 'scores': {}}
-        except Exception as e:
-            return {'status': 'error', 'error': str(e), 'ai_probability': 0.0, 'verdict': 'unknown', 'scores': {}}
-
-    detector._run_ai_manipulation_track = _run_ai_no_dire
+    st.caption("AI detection: ELA, PRNU, Geometric, Reality Defender, Patch-level forensics (GLCM, LBP, Wavelet, Edge, Benford). Protection: LEAT + 3 watermarks + C2PA.")
 
 
 def render_score_bar(label, value, color="#A855F7"):
@@ -258,13 +194,6 @@ with tab1:
 
             with st.spinner("Running Gated v3.0 Detection Flow..."):
                 detector = get_detector()
-                detector.AI_THRESHOLD = ai_threshold
-
-                # Apply or restore DIRE patch based on sidebar toggle
-                if not dire_enabled:
-                    patch_dire_off(detector)
-                elif hasattr(detector, '_orig_run_ai_manipulation_track'):
-                    detector._run_ai_manipulation_track = detector._orig_run_ai_manipulation_track
 
                 _live = _LiveLogStream(_detect_log_placeholder)
                 sys.stdout = _live
@@ -308,18 +237,14 @@ with tab1:
             st.divider()
 
             # --- Step 1: AI Manipulation Track ---
-            st.markdown("### Step 1: AI Manipulation (ELA / PRNU / Geo" + (" / DIRE" if dire_enabled else "") + ")")
+            st.markdown("### Step 1: AI Manipulation (ELA / PRNU / Geo)")
             ai_manip = results.get('ai_manipulation', {})
             scores = ai_manip.get('scores', {})
 
-            s1a, s1b, s1c, s1d = st.columns(4)
+            s1a, s1b, s1c = st.columns(3)
             s1a.metric("ELA", f"{scores.get('ela', 0.0)*100:.1f}%")
             s1b.metric("PRNU", f"{scores.get('prnu', 0.0)*100:.1f}%")
             s1c.metric("Geometric", f"{scores.get('geometric', 0.0)*100:.1f}%")
-            if dire_enabled:
-                s1d.metric("DIRE", f"{scores.get('dire', 0.0)*100:.1f}%")
-            else:
-                s1d.metric("DIRE", "OFF")
 
             manip_ai_prob = ai_manip.get('ai_probability', 0.0)
             st.caption(f"Combined AI prob: {manip_ai_prob*100:.1f}%  |  Verdict: {ai_manip.get('verdict', 'N/A')}")
